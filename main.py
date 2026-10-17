@@ -7,6 +7,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from bs4 import BeautifulSoup
+import cloudscraper
 
 # --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -132,25 +133,26 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 def ruleaza_scraper_multi_categorie():
     postate = incarca_json(POSTATE_FILE)
     
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Referer": "https://www.emag.ro/"
-    }
+    # Cream scraperul cloudscraper care trece automat de filtrele anti-bot
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
 
     for nume_categorie, url_categorie in CATEGORII_EMAG.items():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            response = requests.get(url_categorie, headers=headers, timeout=15)
+            response = scraper.get(url_categorie, timeout=20)
             if response.status_code != 200:
                 print(f"Eroare HTTP {response.status_code} pentru {nume_categorie}", flush=True)
                 continue
                 
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Căutăm cardurile de produse după containerele clasice sau structurile alternative eMAG
             produse = soup.select('.card-item, .card-v2, div[data-id]')
             if not produse:
                 produse = [a.parent for a in soup.select('a[href*="/pd/"]') if a.parent and len(a.get_text(strip=True)) > 10]
