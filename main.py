@@ -136,7 +136,8 @@ def ruleaza_scraper_multi_categorie():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            viewport={"width": 1920, "height": 1080}
         )
         page = context.new_page()
 
@@ -144,13 +145,17 @@ def ruleaza_scraper_multi_categorie():
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
             
             try:
-                page.goto(url_categorie, timeout=30000, wait_until="domcontentloaded")
-                time.sleep(3)
+                page.goto(url_categorie, timeout=45000, wait_until="networkidle")
+                
+                # Așteaptă explicit după cardurile de produse în pagină
+                try:
+                    page.wait_for_selector('.card-item, .card-v2', timeout=10000)
+                except:
+                    pass
                 
                 content = page.content()
                 soup = BeautifulSoup(content, 'html.parser')
                 
-                # Selector generalizat pentru cardurile eMAG actuale
                 produse = soup.select('.card-item, .card-v2, div[data-id]')
                 print(f"Găsite {len(produse)} produse în categoria {nume_categorie}", flush=True)
                 
