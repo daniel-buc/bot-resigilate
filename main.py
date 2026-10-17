@@ -145,18 +145,22 @@ def ruleaza_scraper_multi_categorie():
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
             
             try:
-                # Încărcare rapidă fără timeout-uri inutile de rețea
                 page.goto(url_categorie, timeout=30000, wait_until="domcontentloaded")
-                time.sleep(3) # Timp scurt pentru randarea elementelor vizuale
+                time.sleep(3)
                 
                 content = page.content()
                 soup = BeautifulSoup(content, 'html.parser')
                 
-                produse = soup.select('.card-item, .card-v2, div[data-id]')
-                print(f"Găsite {len(produse)} produse în categoria {nume_categorie}", flush=True)
+                # Căutare după orice element care conține un card de produs sau elemente cu link de tip /pd/
+                produse = soup.select('div.card-item, div.card-v2, div.product-item, div.item-content')
+                if not produse:
+                    # Alternativă extrem de largă: orice container ce conține un link de produs eMAG
+                    produse = [a.parent for a in soup.select('a[href*="/pd/"]') if a.parent and len(a.get_text(strip=True)) > 5]
+                
+                print(f"Găsite {len(produse)} elemente/produse în categoria {nume_categorie}", flush=True)
                 
                 for p_elem in produse:
-                    link_tag = p_elem.select_one('a.card-v2-title, a[href*="/pd/"]') or p_elem.select_one('a')
+                    link_tag = p_elem.select_one('a[href*="/pd/"]')
                     if not link_tag or 'href' not in link_tag.attrs:
                         continue
                         
@@ -169,18 +173,20 @@ def ruleaza_scraper_multi_categorie():
                     if produs_id in postate:
                         continue
                         
-                    titlu_tag = p_elem.select_one('.card-v2-title, .card-title, h2') or link_tag
+                    titlu_tag = p_elem.select_one('a[href*="/pd/"]')
                     titlu = titlu_tag.get_text(strip=True) if titlu_tag else f"Produs Resigilat {nume_categorie}"
+                    if len(titlu) < 5:
+                        continue
                     
-                    img_tag = p_elem.select_one('.card-v2-thumb img, img')
+                    img_tag = p_elem.select_one('img')
                     img_url = None
                     if img_tag:
                         img_url = img_tag.get('data-src') or img_tag.get('src')
                     
-                    if not img_url or "imgur" in img_url:
+                    if not img_url or "imgur" in img_url or not img_url.startswith('http'):
                         img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
 
-                    pret_tag = p_elem.select_one('.product-new-price, p.product-new-price')
+                    pret_tag = p_elem.select_one('.product-new-price, span[class*="price"], p[class*="price"]')
                     if pret_tag:
                         pret_text = pret_tag.get_text(strip=True).replace('.', '').replace(' Lei', '').replace(',', '.')
                         pret = float(''.join(c for c in pret_text if c.isdigit() or c == '.'))
