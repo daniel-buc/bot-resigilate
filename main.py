@@ -4,6 +4,25 @@ import json
 import os
 import time
 from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+
+# --- SERVER WEB MINIM PENTRU PLANUL GRATUIT RENDER ---
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_web_server():
+    server_address = ('', 10000)
+    httpd = HTTPServer(server_address, SimpleHandler)
+    httpd.serve_forever()
+
+# Pornim serverul web într-un fir separat ca să nu blocheze botul
+server_thread = threading.Thread(target=run_web_server, daemon=True)
+server_thread.start()
+# ----------------------------------------------------
 
 # --- CONFIGURĂRI TELEGRAM ---
 TELEGRAM_TOKEN = "8829776172:AAEIU2ezJ7yR-ZOi58-FDFPi9yq2uIer2Jg"
@@ -181,7 +200,7 @@ def ruleaza_scraper_multi_categorie():
             print(f"Eroare la scanarea categoriei {nume_categorie}:", e)
 
 if __name__ == "__main__":
-    print("Botul rulează complet automat pentru toate categoriile!")
+    print("Botul rulează complet automat pe Web Service gratuit!")
     while True:
         ruleaza_scraper_multi_categorie()
         print("Aștept 12 minute până la următoarea verificare...")
