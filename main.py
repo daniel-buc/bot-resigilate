@@ -7,22 +7,26 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# --- SERVER WEB MINIM PENTRU PLANUL GRATUIT RENDER ---
+# --- SERVER WEB PENTRU RENDER (GRATUIT) ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"Bot is running!")
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
+
 def run_web_server():
-    server_address = ('', 10000)
+    port = int(os.environ.get("PORT", 10000))
+    server_address = ('', port)
     httpd = HTTPServer(server_address, SimpleHandler)
     httpd.serve_forever()
 
-# Pornim serverul web într-un fir separat ca să nu blocheze botul
 server_thread = threading.Thread(target=run_web_server, daemon=True)
 server_thread.start()
-# ----------------------------------------------------
+# ------------------------------------------
 
 # --- CONFIGURĂRI TELEGRAM ---
 TELEGRAM_TOKEN = "8829776172:AAEIU2ezJ7yR-ZOi58-FDFPi9yq2uIer2Jg"
@@ -195,13 +199,15 @@ def ruleaza_scraper_multi_categorie():
                     postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     salveaza_json(POSTATE_FILE, postate)
                     time.sleep(5)
+                else:
+                    print(f"Eroare Telegram: {res}")
                     
         except Exception as e:
             print(f"Eroare la scanarea categoriei {nume_categorie}:", e)
 
 if __name__ == "__main__":
-    print("Botul rulează complet automat pe Web Service gratuit!")
+    print("Botul a pornit!")
     while True:
         ruleaza_scraper_multi_categorie()
-        print("Aștept 12 minute până la următoarea verificare...")
+        print("Pauză 12 minute până la următoarea verificare...")
         time.sleep(720)
