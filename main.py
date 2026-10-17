@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
+import sys
 
 # --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -217,7 +218,10 @@ def ruleaza_scraper_multi_categorie():
 
 if __name__ == "__main__":
     print("Botul a pornit complet!", flush=True)
-    while True:
+    if len(sys.argv) > 1 and sys.argv[1] == "--once":
         ruleaza_scraper_multi_categorie()
-        print("Pauză 12 minute...", flush=True)
-        time.sleep(720)
+    else:
+        while True:
+            ruleaza_scraper_multi_categorie()
+            print("Pauză 12 minute...", flush=True)
+            time.sleep(720)
