@@ -211,3 +211,4 @@ if __name__ == "__main__":
         ruleaza_scraper_multi_categorie()
         print("Pauză 12 minute până la următoarea verificare...")
         time.sleep(720)
+        
