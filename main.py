@@ -7,7 +7,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# --- SERVER WEB PENTRU RENDER (GRATUIT) ---
+# --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -26,7 +26,7 @@ def run_web_server():
 
 server_thread = threading.Thread(target=run_web_server, daemon=True)
 server_thread.start()
-# ------------------------------------------
+# -----------------------------------------------
 
 # --- CONFIGURĂRI TELEGRAM ---
 TELEGRAM_TOKEN = "8829776172:AAEIU2ezJ7yR-ZOi58-FDFPi9yq2uIer2Jg"
@@ -96,14 +96,14 @@ def genereaza_link_afiliat(link_emag, nume_oferta):
     }
     
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=8)
         data = response.json()
         if "data" in data and len(data["data"]) > 0:
             return data["data"][0]["ps_url"]
         elif "result" in data and len(data["result"]) > 0:
             return data["result"][0]["ps_url"]
     except Exception as e:
-        print("Eroare Profitshare:", e)
+        print("Eroare Profitshare:", e, flush=True)
         
     return link_emag
 
@@ -130,28 +130,37 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
         "photo": imagine_url
     }
     
-    response = requests.post(url, data=payload)
-    return response.json()
+    try:
+        response = requests.post(url, data=payload, timeout=8)
+        return response.json()
+    except Exception as e:
+        print(f"Eroare trimitere Telegram: {e}", flush=True)
+        return {}
 
 def ruleaza_scraper_multi_categorie():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7"
-    }
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "max-age=0",
+        "Upgrade-Insecure-Requests": "1"
+    })
+    
     postate = incarca_json(POSTATE_FILE)
     
     for nume_categorie, url_categorie in CATEGORII_EMAG.items():
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...")
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            response = requests.get(url_categorie, headers=headers, timeout=15)
+            response = session.get(url_categorie, timeout=8)
             if response.status_code != 200:
-                print(f"Eroare la accesare {nume_categorie}: {response.status_code}")
+                print(f"Eroare HTTP {response.status_code} la {nume_categorie}", flush=True)
                 continue
 
             soup = BeautifulSoup(response.text, 'html.parser')
             produse = soup.select('.card-v2, .card-item, .product-k-box')
-            print(f"Găsite {len(produse)} produse în categoria {nume_categorie}")
+            print(f"Găsite {len(produse)} produse în categoria {nume_categorie}", flush=True)
             
             for p in produse:
                 link_tag = p.select_one('a[href*="/pd/"], a.card-v2-title') or p.select_one('a')
@@ -195,20 +204,19 @@ def ruleaza_scraper_multi_categorie():
                 )
                 
                 if res.get("ok"):
-                    print(f"Postat cu succes ({nume_categorie}): {titlu}")
+                    print(f"Postat cu succes ({nume_categorie}): {titlu}", flush=True)
                     postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     salveaza_json(POSTATE_FILE, postate)
-                    time.sleep(5)
+                    time.sleep(3)
                 else:
-                    print(f"Eroare Telegram: {res}")
+                    print(f"Eroare Telegram: {res}", flush=True)
                     
         except Exception as e:
-            print(f"Eroare la scanarea categoriei {nume_categorie}:", e)
+            print(f"Eroare la scanarea categoriei {nume_categorie}: {e}", flush=True)
 
 if __name__ == "__main__":
-    print("Botul a pornit!")
+    print("Botul a pornit complet!", flush=True)
     while True:
         ruleaza_scraper_multi_categorie()
-        print("Pauză 12 minute până la următoarea verificare...")
+        print("Pauză 12 minute...", flush=True)
         time.sleep(720)
-        
