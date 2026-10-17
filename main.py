@@ -1,4 +1,4 @@
-import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 import json
 import os
@@ -95,8 +95,9 @@ def genereaza_link_afiliat(link_emag, nume_oferta):
         ]
     }
     
+    scraper = cloudscraper.create_scraper()
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=8)
+        response = scraper.post(url, headers=headers, json=payload, timeout=10)
         data = response.json()
         if "data" in data and len(data["data"]) > 0:
             return data["data"][0]["ps_url"]
@@ -130,22 +131,22 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
         "photo": imagine_url
     }
     
+    scraper = cloudscraper.create_scraper()
     try:
-        response = requests.post(url, data=payload, timeout=8)
+        response = scraper.post(url, data=payload, timeout=10)
         return response.json()
     except Exception as e:
         print(f"Eroare trimitere Telegram: {e}", flush=True)
         return {}
 
 def ruleaza_scraper_multi_categorie():
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Cache-Control": "max-age=0",
-        "Upgrade-Insecure-Requests": "1"
-    })
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
     
     postate = incarca_json(POSTATE_FILE)
     
@@ -153,7 +154,7 @@ def ruleaza_scraper_multi_categorie():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            response = session.get(url_categorie, timeout=8)
+            response = scraper.get(url_categorie, timeout=15)
             if response.status_code != 200:
                 print(f"Eroare HTTP {response.status_code} la {nume_categorie}", flush=True)
                 continue
