@@ -136,19 +136,20 @@ def ruleaza_scraper_multi_categorie():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            # Folosim un serviciu proxy/cors public gratuit pentru a ocoli blocajul IP-ului de pe Render
-            proxy_url = f"https://api.allorigins.win/get?url={requests.utils.quote(url_categorie)}"
-            response = requests.get(proxy_url, timeout=25)
+            # Folosirea endpoint-ului /raw de la allorigins pentru a prelua direct codul HTML brut
+            proxy_url = f"https://api.allorigins.win/raw?url={requests.utils.quote(url_categorie)}"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(proxy_url, headers=headers, timeout=25)
             
             if response.status_code != 200:
                 print(f"Eroare HTTP {response.status_code} pentru {nume_categorie}", flush=True)
                 continue
                 
-            data = response.json()
-            html_content = data.get("contents", "")
-            
-            if not html_content:
-                print(f"Conținut gol primit pentru {nume_categorie}", flush=True)
+            html_content = response.text
+            if not html_content or len(html_content) < 500:
+                print(f"Conținut invalid sau gol primit pentru {nume_categorie}", flush=True)
                 continue
                 
             soup = BeautifulSoup(html_content, 'html.parser')
