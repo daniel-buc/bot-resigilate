@@ -1,4 +1,3 @@
-from bs4 import BeautifulSoup
 import json
 import os
 import time
@@ -7,7 +6,7 @@ import requests
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
-from playwright.sync_api import sync_playwright
+from bs4 import BeautifulSoup
 
 # --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -133,94 +132,84 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 def ruleaza_scraper_multi_categorie():
     postate = incarca_json(POSTATE_FILE)
     
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            viewport={"width": 1920, "height": 1080}
-        )
-        page = context.new_page()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Referer": "https://www.emag.ro/"
+    }
 
-        for nume_categorie, url_categorie in CATEGORII_EMAG.items():
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
+    for nume_categorie, url_categorie in CATEGORII_EMAG.items():
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
+        
+        try:
+            response = requests.get(url_categorie, headers=headers, timeout=15)
+            if response.status_code != 200:
+                print(f"Eroare HTTP {response.status_code} pentru {nume_categorie}", flush=True)
+                continue
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
             
-            try:
-                page.goto(url_categorie, timeout=40000, wait_until="domcontentloaded")
-                
-                # Forțăm browserul să aștepte încărcarea completă a listei de produse prin JS
-                try:
-                    page.wait_for_selector('a[href*="/pd/"]', timeout=15000)
-                except:
-                    pass
-                
-                time.sleep(2)
-                
-                content = page.content()
-                soup = BeautifulSoup(content, 'html.parser')
-                
-                # Selectăm toate elementele care conțin link-uri de produs eMAG
+            # Căutăm cardurile de produse după containerele clasice sau structurile alternative eMAG
+            produse = soup.select('.card-item, .card-v2, div[data-id]')
+            if not produse:
                 produse = [a.parent for a in soup.select('a[href*="/pd/"]') if a.parent and len(a.get_text(strip=True)) > 10]
                 
-                print(f"Găsite {len(produse)} elemente/produse în categoria {nume_categorie}", flush=True)
+            print(f"Găsite {len(produse)} produse în categoria {nume_categorie}", flush=True)
+            
+            for p_elem in produse:
+                link_tag = p_elem.select_one('a.card-v2-title, a[href*="/pd/"]') or p_elem.select_one('a')
+                if not link_tag or 'href' not in link_tag.attrs:
+                    continue
+                    
+                link = link_tag['href']
+                if not link.startswith('http'):
+                    link = 'https://www.emag.ro' + link
+                    
+                produs_id = link.split('/')[-2] if '/' in link else link
                 
-                for p_elem in produse:
-                    link_tag = p_elem.select_one('a[href*="/pd/"]')
-                    if not link_tag or 'href' not in link_tag.attrs:
-                        continue
-                        
-                    link = link_tag['href']
-                    if not link.startswith('http'):
-                        link = 'https://www.emag.ro' + link
-                        
-                    produs_id = link.split('/')[-2] if '/' in link else link
+                if produs_id in postate:
+                    continue
                     
-                    if produs_id in postate:
-                        continue
-                        
-                    titlu = link_tag.get_text(strip=True)
-                    if len(titlu) < 5:
-                        continue
-                    
-                    img_tag = p_elem.select_one('img')
-                    img_url = None
-                    if img_tag:
-                        img_url = img_tag.get('data-src') or img_tag.get('src')
-                    
-                    if not img_url or "imgur" in img_url or not img_url.startswith('http'):
-                        img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
+                titlu_tag = p_elem.select_one('.card-v2-title, .card-title, h2') or link_tag
+                titlu = titlu_tag.get_text(strip=True) if titlu_tag else f"Produs Resigilat {nume_categorie}"
+                if len(titlu) < 5:
+                    continue
+                
+                img_tag = p_elem.select_one('.card-v2-thumb img, img')
+                img_url = None
+                if img_tag:
+                    img_url = img_tag.get('data-src') or img_tag.get('src')
+                
+                if not img_url or "imgur" in img_url or not img_url.startswith('http'):
+                    img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
 
-                    # Căutăm prețul în elementul curent sau în apropriere
-                    pret_tag = p_elem.select_one('.product-new-price, span[class*="price"], p[class*="price"]')
-                    if not pret_tag and p_elem.parent:
-                        pret_tag = p_elem.parent.select_one('.product-new-price, span[class*="price"], p[class*="price"]')
-                        
-                    if pret_tag:
-                        pret_text = pret_tag.get_text(strip=True).replace('.', '').replace(' Lei', '').replace(',', '.')
-                        pret = float(''.join(c for c in pret_text if c.isdigit() or c == '.'))
-                    else:
-                        pret = 199.99
+                pret_tag = p_elem.select_one('.product-new-price, span[class*="price"], p[class*="price"]')
+                if pret_tag:
+                    pret_text = pret_tag.get_text(strip=True).replace('.', '').replace(' Lei', '').replace(',', '.')
+                    pret = float(''.join(c for c in pret_text if c.isdigit() or c == '.'))
+                else:
+                    pret = 199.99
 
-                    res = trimite_oferta_telegram(
-                        titlu=titlu,
-                        pret=pret,
-                        stare_resigilat="urme fine de utilizare, ambalaj deschis",
-                        link_original=link,
-                        imagine_url=img_url,
-                        produs_id=produs_id
-                    )
+                res = trimite_oferta_telegram(
+                    titlu=titlu,
+                    pret=pret,
+                    stare_resigilat="urme fine de utilizare, ambalaj deschis",
+                    link_original=link,
+                    imagine_url=img_url,
+                    produs_id=produs_id
+                )
+                
+                if res.get("ok"):
+                    print(f"Postat cu succes ({nume_categorie}): {titlu}", flush=True)
+                    postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    salveaza_json(POSTATE_FILE, postate)
+                    time.sleep(1)
+                else:
+                    print(f"Eroare Telegram: {res}", flush=True)
                     
-                    if res.get("ok"):
-                        print(f"Postat cu succes ({nume_categorie}): {titlu}", flush=True)
-                        postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        salveaza_json(POSTATE_FILE, postate)
-                        time.sleep(2)
-                    else:
-                        print(f"Eroare Telegram: {res}", flush=True)
-                        
-            except Exception as e:
-                print(f"Eroare la scanarea categoriei {nume_categorie}: {e}", flush=True)
-
-        browser.close()
+        except Exception as e:
+            print(f"Eroare la scanarea categoriei {nume_categorie}: {e}", flush=True)
 
 if __name__ == "__main__":
     print("Botul a pornit complet!", flush=True)
