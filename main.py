@@ -126,21 +126,27 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 
 def ruleaza_scraper_resigilate():
     postate = incarca_json(POSTATE_FILE)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare avansată resigilate (prin Regex)...", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare directă resigilate...", flush=True)
     
     try:
-        proxy_url = f"https://api.allorigins.win/raw?url={requests.utils.quote(URL_RESIGILATE)}"
+        # Folosim o sesiune HTTP pentru a păstra cookie-urile și headere complete de browser real
+        session = requests.Session()
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://www.emag.ro/",
+            "Connection": "keep-alive"
         }
-        response = requests.get(proxy_url, headers=headers, timeout=25)
+        
+        response = session.get(URL_RESIGILATE, headers=headers, timeout=30)
         
         if response.status_code != 200:
-            print(f"Eroare HTTP {response.status_code} la preluarea paginii", flush=True)
+            print(f"Eroare HTTP {response.status_code} la accesarea eMAG", flush=True)
             return
             
-        html_content = response.text
-        soup = BeautifulSoup(html_content, 'html.parser')
+        soup = BeautifulSoup(response.text, 'html.parser')
         
         link_uri_gasite = soup.select('a[href*="/pd/"]')
         print(f"Găsite {len(link_uri_gasite)} link-uri brute de produse", flush=True)
@@ -209,7 +215,7 @@ def ruleaza_scraper_resigilate():
                 print(f"Eroare Telegram: {res}", flush=True)
                 
     except Exception as e:
-        print(f"Eroare la scanarea prin Regex: {e}", flush=True)
+        print(f"Eroare la scanarea directă: {e}", flush=True)
 
 if __name__ == "__main__":
     print("Botul a pornit complet!", flush=True)
