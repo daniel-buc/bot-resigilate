@@ -145,13 +145,9 @@ def ruleaza_scraper_multi_categorie():
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
             
             try:
-                page.goto(url_categorie, timeout=45000, wait_until="networkidle")
-                
-                # Așteaptă explicit după cardurile de produse în pagină
-                try:
-                    page.wait_for_selector('.card-item, .card-v2', timeout=10000)
-                except:
-                    pass
+                # Încărcare rapidă fără timeout-uri inutile de rețea
+                page.goto(url_categorie, timeout=30000, wait_until="domcontentloaded")
+                time.sleep(3) # Timp scurt pentru randarea elementelor vizuale
                 
                 content = page.content()
                 soup = BeautifulSoup(content, 'html.parser')
