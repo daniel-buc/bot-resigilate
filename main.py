@@ -3,6 +3,7 @@ import os
 import time
 import sys
 import requests
+import re
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
@@ -40,7 +41,6 @@ PROFITSHARE_KEY = os.environ.get("PROFITSHARE_KEY", "1c78c3895d9a504da4e7fa85f53
 DB_FILE = "istoric_preturi.json"
 POSTATE_FILE = "produse_postate.json"
 
-# Folosim pagina generală de resigilate eMAG cu sortare după cele mai noi
 URL_RESIGILATE = "https://www.emag.ro/resigilate/c?ref=hp_menu_quick-links_1_6&sort-dir=desc&sort-field=rated-desc"
 
 def incarca_json(cale_fisier):
@@ -126,7 +126,7 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 
 def ruleaza_scraper_resigilate():
     postate = incarca_json(POSTATE_FILE)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare produse resigilate...", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare avansată resigilate (prin Regex)...", flush=True)
     
     try:
         proxy_url = f"https://api.allorigins.win/raw?url={requests.utils.quote(URL_RESIGILATE)}"
@@ -136,50 +136,66 @@ def ruleaza_scraper_resigilate():
         response = requests.get(proxy_url, headers=headers, timeout=25)
         
         if response.status_code != 200:
-            print(f"Eroare HTTP {response.status_code} la preluarea paginii de resigilate", flush=True)
+            print(f"Eroare HTTP {response.status_code} la preluarea paginii", flush=True)
             return
             
-        soup = BeautifulSoup(response.text, 'html.parser')
+        html_content = response.text
+        soup = BeautifulSoup(html_content, 'html.parser')
         
-        produse = soup.select('.card-item, .card-v2, div[data-id]')
-        if not produse:
-            produse = [a.parent for a in soup.select('a[href*="/pd/"]') if a.parent and len(a.get_text(strip=True)) > 10]
-            
-        print(f"Găsite {len(produse)} produse pe pagina de resigilate", flush=True)
+        # Căutăm toate tagurile <a> care conțin linkuri de produs /pd/
+        link-uri_gasite = soup.select('a[href*="/pd/"]')
+        print(f"Găsite {len(link-uri_gasite)} link-uri brute de produse", flush=True)
         
-        for p_elem in produse:
-            link_tag = p_elem.select_one('a.card-v2-title, a[href*="/pd/"]') or p_elem.select_one('a')
-            if not link_tag or 'href' not in link_tag.attrs:
+        produse_procesate = set()
+
+        for a_tag in link-uri_gasite:
+            link = a_tag.get('href')
+            if not link:
                 continue
-                
-            link = link_tag['href']
             if not link.startswith('http'):
                 link = 'https://www.emag.ro' + link
                 
-            produs_id = link.split('/')[-2] if '/' in link else link
-            
-            if produs_id in postate:
+            # Extragem ID-ul unic din URL-ul de produs (ex: /pd/XYZ123/)
+            match_id = re.search(r'/pd/([A-Z0-9]+)', link)
+            if not match_id:
                 continue
-                
-            titlu_tag = p_elem.select_one('.card-v2-title, .card-title, h2') or link_tag
-            titlu = titlu_tag.get_text(strip=True) if titlu_tag else "Produs Resigilat eMAG"
-            if len(titlu) < 5:
+            produs_id = match_id.group(1)
+            
+            if produs_id in produse_procesate or produs_id in postate:
                 continue
+            produse_procesate.add(produs_id)
             
-            img_tag = p_elem.select_one('.card-v2-thumb img, img')
-            img_url = None
-            if img_tag:
-                img_url = img_tag.get('data-src') or img_tag.get('src')
-            
-            if not img_url or "imgur" in img_url or not img_url.startswith('http'):
-                img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
-
-            pret_tag = p_elem.select_one('.product-new-price, span[class*="price"], p[class*="price"]')
-            if pret_tag:
-                pret_text = pret_tag.get_text(strip=True).replace('.', '').replace(' Lei', '').replace(',', '.')
-                pret = float(''.join(c for c in pret_text if c.isdigit() or c == '.'))
+            titlu = a_tag.get_text(strip=True)
+            if len(titlu) < 8:
+                # Dacă textul din link e scurt, căutăm titlu în elementul părinte
+                parent = a_tag.parent
+                if parent:
+                    titlu = parent.get_text(strip=True)
+            if len(titlu) < 8:
+                titlu = f"Produs Resigilat eMAG ({produs_id})"
             else:
-                pret = 199.99
+                # Curățăm titlurile prea lungi sau redundante
+                titlu = titlu[:120]
+
+            # Căutăm imaginea în apropiere
+            img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
+            parent_container = a_tag.find_parent(['div', 'article'])
+            if parent_container:
+                img_tag = parent_container.select_one('img')
+                if img_tag:
+                    img_url = img_tag.get('data-src') or img_tag.get('src') or img_url
+
+            # Căutăm prețul în textul containerului folosind Regex pentru cifre urmate de 'Lei' sau puncte
+            pret = 199.99
+            if parent_container:
+                text_container = parent_container.get_text()
+                match_pret = re.search(r'([\d\.]+)\s*(?:Lei|RON)', text_container)
+                if match_pret:
+                    pret_str = match_pret.group(1).replace('.', '')
+                    try:
+                        pret = float(pret_str)
+                    except:
+                        pass
 
             res = trimite_oferta_telegram(
                 titlu=titlu,
@@ -191,15 +207,15 @@ def ruleaza_scraper_resigilate():
             )
             
             if res.get("ok"):
-                print(f"Postat cu succes: {titlu}", flush=True)
+                print(f"Postat cu succes: {titlu[:50]}...", flush=True)
                 postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 salveaza_json(POSTATE_FILE, postate)
-                time.sleep(1)
+                time.sleep(1.5)
             else:
                 print(f"Eroare Telegram: {res}", flush=True)
                 
     except Exception as e:
-        print(f"Eroare la scanarea resigilatelor: {e}", flush=True)
+        print(f"Eroare la scanarea prin Regex: {e}", flush=True)
 
 if __name__ == "__main__":
     print("Botul a pornit complet!", flush=True)
