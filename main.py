@@ -8,6 +8,7 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from bs4 import BeautifulSoup
+import cloudscraper
 
 # --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -126,21 +127,18 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 
 def ruleaza_scraper_resigilate():
     postate = incarca_json(POSTATE_FILE)
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare directă resigilate...", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare cu cloudscraper...", flush=True)
     
     try:
-        # Folosim o sesiune HTTP pentru a păstra cookie-urile și headere complete de browser real
-        session = requests.Session()
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Referer": "https://www.emag.ro/",
-            "Connection": "keep-alive"
-        }
+        scraper = cloudscraper.create_scraper(
+            browser={
+                'browser': 'chrome',
+                'platform': 'windows',
+                'desktop': True
+            }
+        )
         
-        response = session.get(URL_RESIGILATE, headers=headers, timeout=30)
+        response = scraper.get(URL_RESIGILATE, timeout=30)
         
         if response.status_code != 200:
             print(f"Eroare HTTP {response.status_code} la accesarea eMAG", flush=True)
@@ -215,7 +213,7 @@ def ruleaza_scraper_resigilate():
                 print(f"Eroare Telegram: {res}", flush=True)
                 
     except Exception as e:
-        print(f"Eroare la scanarea directă: {e}", flush=True)
+        print(f"Eroare la scanarea cu cloudscraper: {e}", flush=True)
 
 if __name__ == "__main__":
     print("Botul a pornit complet!", flush=True)
