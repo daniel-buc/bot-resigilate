@@ -142,20 +142,18 @@ def ruleaza_scraper_resigilate():
         html_content = response.text
         soup = BeautifulSoup(html_content, 'html.parser')
         
-        # Căutăm toate tagurile <a> care conțin linkuri de produs /pd/
-        link-uri_gasite = soup.select('a[href*="/pd/"]')
-        print(f"Găsite {len(link-uri_gasite)} link-uri brute de produse", flush=True)
+        link_uri_gasite = soup.select('a[href*="/pd/"]')
+        print(f"Găsite {len(link_uri_gasite)} link-uri brute de produse", flush=True)
         
         produse_procesate = set()
 
-        for a_tag in link-uri_gasite:
+        for a_tag in link_uri_gasite:
             link = a_tag.get('href')
             if not link:
                 continue
             if not link.startswith('http'):
                 link = 'https://www.emag.ro' + link
                 
-            # Extragem ID-ul unic din URL-ul de produs (ex: /pd/XYZ123/)
             match_id = re.search(r'/pd/([A-Z0-9]+)', link)
             if not match_id:
                 continue
@@ -167,17 +165,14 @@ def ruleaza_scraper_resigilate():
             
             titlu = a_tag.get_text(strip=True)
             if len(titlu) < 8:
-                # Dacă textul din link e scurt, căutăm titlu în elementul părinte
                 parent = a_tag.parent
                 if parent:
                     titlu = parent.get_text(strip=True)
             if len(titlu) < 8:
                 titlu = f"Produs Resigilat eMAG ({produs_id})"
             else:
-                # Curățăm titlurile prea lungi sau redundante
                 titlu = titlu[:120]
 
-            # Căutăm imaginea în apropiere
             img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
             parent_container = a_tag.find_parent(['div', 'article'])
             if parent_container:
@@ -185,7 +180,6 @@ def ruleaza_scraper_resigilate():
                 if img_tag:
                     img_url = img_tag.get('data-src') or img_tag.get('src') or img_url
 
-            # Căutăm prețul în textul containerului folosind Regex pentru cifre urmate de 'Lei' sau puncte
             pret = 199.99
             if parent_container:
                 text_container = parent_container.get_text()
