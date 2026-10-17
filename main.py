@@ -7,7 +7,6 @@ from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 from bs4 import BeautifulSoup
-import cloudscraper
 
 # --- SERVER WEB PENTRU RENDER (HEALTH CHECK) ---
 class SimpleHandler(BaseHTTPRequestHandler):
@@ -132,31 +131,27 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 
 def ruleaza_scraper_multi_categorie():
     postate = incarca_json(POSTATE_FILE)
-    
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'android',
-            'desktop': False
-        }
-    )
-
-    headers = {
-        "User-Agent": "EMAG Android App 9.0.0",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "X-Requested-With": "ro.emag.android"
-    }
 
     for nume_categorie, url_categorie in CATEGORII_EMAG.items():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            response = scraper.get(url_categorie, headers=headers, timeout=20)
+            # Folosim un serviciu proxy/cors public gratuit pentru a ocoli blocajul IP-ului de pe Render
+            proxy_url = f"https://api.allorigins.win/get?url={requests.utils.quote(url_categorie)}"
+            response = requests.get(proxy_url, timeout=25)
+            
             if response.status_code != 200:
                 print(f"Eroare HTTP {response.status_code} pentru {nume_categorie}", flush=True)
                 continue
                 
-            soup = BeautifulSoup(response.text, 'html.parser')
+            data = response.json()
+            html_content = data.get("contents", "")
+            
+            if not html_content:
+                print(f"Conținut gol primit pentru {nume_categorie}", flush=True)
+                continue
+                
+            soup = BeautifulSoup(html_content, 'html.parser')
             
             produse = soup.select('.card-item, .card-v2, div[data-id]')
             if not produse:
