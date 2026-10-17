@@ -89,14 +89,8 @@ def genereaza_link_afiliat(link_emag, nume_oferta):
         "Content-Type": "application/json"
     }
     payload = {
-        "links": [
-            {
-                "url": link_emag,
-                "name": nume_oferta
-            }
-        ]
+        "links": [{"url": link_emag, "name": nume_oferta}]
     }
-    
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=10)
         data = response.json()
@@ -106,7 +100,6 @@ def genereaza_link_afiliat(link_emag, nume_oferta):
             return data["result"][0]["ps_url"]
     except Exception as e:
         print("Eroare Profitshare:", e, flush=True)
-        
     return link_emag
 
 def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine_url, produs_id, cod_voucher=None):
@@ -114,7 +107,6 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
     link_afiliat = genereaza_link_afiliat(link_original, titlu)
     
     linie_voucher = f"🎟️ Voucher extra: `{cod_voucher}`\n" if cod_voucher else ""
-    
     mesaj = (
         f"💵 **{pret} lei**\n"
         f"📦 **{titlu}**\n"
@@ -131,7 +123,6 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
         "parse_mode": "Markdown",
         "photo": imagine_url
     }
-    
     try:
         response = requests.post(url, data=payload, timeout=10)
         return response.json()
@@ -154,15 +145,17 @@ def ruleaza_scraper_multi_categorie():
             
             try:
                 page.goto(url_categorie, timeout=30000, wait_until="domcontentloaded")
-                time.sleep(2)  # Permite incarcarea elementelor
+                time.sleep(3)
                 
                 content = page.content()
                 soup = BeautifulSoup(content, 'html.parser')
-                produse = soup.select('.card-v2, .card-item, .product-k-box')
+                
+                # Selector generalizat pentru cardurile eMAG actuale
+                produse = soup.select('.card-item, .card-v2, div[data-id]')
                 print(f"Găsite {len(produse)} produse în categoria {nume_categorie}", flush=True)
                 
                 for p_elem in produse:
-                    link_tag = p_elem.select_one('a[href*="/pd/"], a.card-v2-title') or p_elem.select_one('a')
+                    link_tag = p_elem.select_one('a.card-v2-title, a[href*="/pd/"]') or p_elem.select_one('a')
                     if not link_tag or 'href' not in link_tag.attrs:
                         continue
                         
@@ -175,10 +168,10 @@ def ruleaza_scraper_multi_categorie():
                     if produs_id in postate:
                         continue
                         
-                    titlu_tag = p_elem.select_one('.card-v2-title, .card-title') or link_tag
+                    titlu_tag = p_elem.select_one('.card-v2-title, .card-title, h2') or link_tag
                     titlu = titlu_tag.get_text(strip=True) if titlu_tag else f"Produs Resigilat {nume_categorie}"
                     
-                    img_tag = p_elem.select_one('.card-v2-thumb-inner img, img')
+                    img_tag = p_elem.select_one('.card-v2-thumb img, img')
                     img_url = None
                     if img_tag:
                         img_url = img_tag.get('data-src') or img_tag.get('src')
@@ -186,7 +179,7 @@ def ruleaza_scraper_multi_categorie():
                     if not img_url or "imgur" in img_url:
                         img_url = "https://s13emagst.akamaized.net/layout/ro/images/logo//59/88358.svg"
 
-                    pret_tag = p_elem.select_one('.product-new-price')
+                    pret_tag = p_elem.select_one('.product-new-price, p.product-new-price')
                     if pret_tag:
                         pret_text = pret_tag.get_text(strip=True).replace('.', '').replace(' Lei', '').replace(',', '.')
                         pret = float(''.join(c for c in pret_text if c.isdigit() or c == '.'))
@@ -206,7 +199,7 @@ def ruleaza_scraper_multi_categorie():
                         print(f"Postat cu succes ({nume_categorie}): {titlu}", flush=True)
                         postate[produs_id] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         salveaza_json(POSTATE_FILE, postate)
-                        time.sleep(3)
+                        time.sleep(2)
                     else:
                         print(f"Eroare Telegram: {res}", flush=True)
                         
