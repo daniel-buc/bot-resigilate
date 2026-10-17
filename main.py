@@ -133,20 +133,25 @@ def trimite_oferta_telegram(titlu, pret, stare_resigilat, link_original, imagine
 def ruleaza_scraper_multi_categorie():
     postate = incarca_json(POSTATE_FILE)
     
-    # Cream scraperul cloudscraper care trece automat de filtrele anti-bot
     scraper = cloudscraper.create_scraper(
         browser={
             'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True
+            'platform': 'android',
+            'desktop': False
         }
     )
+
+    headers = {
+        "User-Agent": "EMAG Android App 9.0.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "X-Requested-With": "ro.emag.android"
+    }
 
     for nume_categorie, url_categorie in CATEGORII_EMAG.items():
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Scanare categorie: {nume_categorie}...", flush=True)
         
         try:
-            response = scraper.get(url_categorie, timeout=20)
+            response = scraper.get(url_categorie, headers=headers, timeout=20)
             if response.status_code != 200:
                 print(f"Eroare HTTP {response.status_code} pentru {nume_categorie}", flush=True)
                 continue
